@@ -34,6 +34,7 @@ export class BalancesService {
         amount: btcBalance,
         value: btcBalance * btcPrice,
         change: -2,
+        assetPrice: btcPrice,
       },
       {
         id: 2,
@@ -42,6 +43,7 @@ export class BalancesService {
         amount: usdcBalance,
         value: usdcBalance,
         change: 0,
+        assetPrice: 1,
       },
     ];
   }
@@ -64,6 +66,7 @@ export class BalancesService {
   }
 
   private async getBtcPrice(): Promise<number> {
+    return 92000;
     try {
       const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
         params: {
