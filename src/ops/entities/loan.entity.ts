@@ -26,7 +26,7 @@ export class Loan extends BaseEntity {
   depositDerivationPath?: string;
 
   @Column({ type: 'varchar', length: 200, nullable: true })
-  repaymentReferrence?: string;
+  repaymentReference?: string;
 
   @Column({ type: 'numeric', nullable: true })
   receivedAmount: number;

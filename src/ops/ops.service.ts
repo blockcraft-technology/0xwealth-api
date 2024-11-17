@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Lending } from './entities/lending.entity';
-import { Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 import { Cron, CronExpression, Interval } from '@nestjs/schedule';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -35,8 +35,41 @@ export class OpsService {
         loan.depositAddress = wallet.publicKey;
         loan.depositDerivationPath = wallet.path;
         loan.status = 'pending';
-        await this._loanRepository.save(loan);
+        return this._loanRepository.save(loan);
     }
+
+    @Cron(CronExpression.EVERY_5_SECONDS)
+    async checkPendingLoans() {
+        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+        const pendingLoans = await this._loanRepository.find({
+            where: {
+                status: 'pending',
+                createdAt: MoreThanOrEqual(fifteenMinutesAgo),
+            },
+        });
+
+        for (const loan of pendingLoans) {
+            try {
+                const address = loan.depositAddress;
+                const balances = await this.balancesService.getBalancesByAddress(address);
+                const btcPrice = await this.balancesService.getBtcPrice();
+                const btcBalanceInfo = balances.find(balance => balance.symbol === 'BTC');
+                const btcBalance = btcBalanceInfo ? btcBalanceInfo.amount : 0;
+
+                if (btcBalance > 0) {
+                    loan.receivedAmount = btcBalance;
+                    loan.creditDate = new Date();
+                    loan.creditAmount = btcBalance * btcPrice;
+                    loan.repaymentReference = Math.random().toString(36).substring(2, 8);
+                    loan.status = 'received';
+                    await this._loanRepository.save(loan);
+                }
+            } catch (error) {
+                this.logger.error(`Error checking loan ${loan.id}: ${error.message}`);
+            }
+        }
+    }
+
 
     @Cron(CronExpression.EVERY_5_SECONDS)
     async checkPendingLendings() {

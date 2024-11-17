@@ -65,7 +65,7 @@ export class BalancesService {
     }
   }
 
-  private async getBtcPrice(): Promise<number> {
+  public async getBtcPrice(): Promise<number> {
     return 92000;
     try {
       const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {

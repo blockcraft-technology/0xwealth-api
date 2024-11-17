@@ -8,6 +8,12 @@ export class OpsController {
         private readonly _opsService: OpsService,
     ) {}
 
+    @Post('requestLoan')
+    async requestLoan(@Body() payload: { userWallet: string }) {
+        return this._opsService.createLoan(payload.userWallet);
+    }
+
+
     @Post('reportLending')
     async reportLending(@Body() payload: any) {
         /*
