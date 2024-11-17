@@ -16,7 +16,7 @@ import { join } from 'path';
       url: process.env.DATABASE,
       entities: [join(__dirname, '**', '*.entity.{ts,js}')],
       ssl: false,
-      synchronize: false,
+      synchronize: true,
     }),
     BalancesModule,
     CustodialModule,
