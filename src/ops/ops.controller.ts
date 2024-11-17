@@ -1,5 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { OpsService } from './ops.service';
+import { Lending } from './entities/lending.entity';
 
 @Controller('ops')
 export class OpsController {
@@ -8,10 +9,9 @@ export class OpsController {
     ) {}
 
     @Post('reportLending')
-    reportLending(@Body() payload: any) {
+    async reportLending(@Body() payload: any) {
         /*
-            sample payload: 
-
+            Sample payload: 
             {
                 "status": "success",
                 "transaction_status": "submitted",
@@ -21,9 +21,19 @@ export class OpsController {
                 "chain": "worldchain",
                 "timestamp": "2024-11-17T07:41:59.796+07:00"
             }
-
         */
-       
-    }
 
+        const lending = new Lending({
+            userWallet: payload.from,
+            transactionId: payload.transaction_id,
+            referrence: payload.reference,
+            initDate: new Date(payload.timestamp),
+            status: 'pending',
+            receivedAmount: null,
+        });
+
+        await this._opsService.saveLending(lending);
+
+        return { success: true };
+    }
 }
