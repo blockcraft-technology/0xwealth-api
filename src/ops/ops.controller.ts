@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { OpsService } from './ops.service';
 import { Lending } from './entities/lending.entity';
 
@@ -11,6 +11,11 @@ export class OpsController {
     @Post('requestLoan')
     async requestLoan(@Body() payload: { userWallet: string }) {
         return this._opsService.createLoan(payload.userWallet);
+    }
+
+    @Get('test')
+    async test() {
+        return this._opsService.checkPendingCredits();
     }
 
 

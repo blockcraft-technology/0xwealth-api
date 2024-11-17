@@ -38,5 +38,5 @@ export class Loan extends BaseEntity {
   creditAmount: number;
 
   @Column({ type: 'varchar', length: 200, nullable: false, default: 'pending'})
-  status: 'pending' | 'received' | 'loan_credited';
+  status: 'pending' | 'received' | 'loan_credited' | 'error';
 }

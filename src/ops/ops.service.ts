@@ -24,7 +24,9 @@ export class OpsService {
         private readonly balancesService: BalancesService,
         private readonly custodialService: CustodialService,
         private readonly configService: ConfigService,
-    ) {}
+    ) {
+        // this.checkPendingCredits();
+    }
 
     async saveLending(lending: Lending) {
         return await this._lendingRepository.save(lending);
@@ -43,48 +45,62 @@ export class OpsService {
 
     @Cron(CronExpression.EVERY_10_SECONDS)
     async checkPendingCredits() {
-        const pendingLoans = await this._loanRepository.find({
-            where: {
-                status: 'received'
-            },
-            take: 2,
-        });
+        try {
+            const pendingLoans = await this._loanRepository.find({
+                where: { status: 'received' },
+                take: 1,
+            });
     
-        const usdcAbi = [
-            "function transfer(address to, uint256 amount) external returns (bool)",
-        ];
-        
-        const rpcUrl = this.configService.get<string>('RPC_URL');
-        const walletKey = this.configService.get<string>('LENDING_POOL_PK');
-        const usdcContractAddress = this.configService.get<string>('USDC_CONTRACT_ADDRESS');
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
+            if (pendingLoans.length === 0) {
+                this.logger.debug("No pending loans to process.");
+                return;
+            }
     
-        const lendingPoolWallet = new ethers.Wallet(walletKey, provider);
-        const usdcContract = new ethers.Contract(
-            usdcContractAddress,
-            usdcAbi,
-            lendingPoolWallet
-        );
-    
-        for (const loan of pendingLoans) {
-            const payoutAmount = ethers.parseUnits((loan.creditAmount * 0.7).toString(), 6);
-            const payoutWallet = loan.userWallet;
-    
-            try {
-                const tx = await usdcContract.transfer(payoutWallet, payoutAmount);
-                await tx.wait(); 
-    
+            // Fetch environment variables
+            const rpcUrl = "https://worldchain-mainnet.g.alchemy.com/v2/5MOvCN2v3L-JTCDXE8jWToC_j9CBxO7v"; //this.configService.get<string>('NODE_URL');
+            console.log(rpcUrl);
+            const privateKey = this.configService.get<string>('LENDING_POOL_PK');
+
+            console.log(privateKey);
+            const contractAddress = "0xb04559bEF8D035B7f4C664998CD13fB633a20Df7";
+
+          
+            const provider = new ethers.JsonRpcProvider(rpcUrl);
+            const wallet = new ethers.Wallet(privateKey, provider);
+          
+            const abi = [
+              "function payout(address destination, uint256 amount) external",
+            ];
+            const contract = new ethers.Contract(contractAddress, abi, wallet);
+          
+            for (const loan of pendingLoans) {
                 loan.status = 'loan_credited';
                 await this._loanRepository.save(loan);
+                try {    
+                    const payoutAmount = Math.floor((loan.creditAmount * 0.7)) * 10 ** 6;
+                    const payoutWallet = ethers.getAddress(loan.userWallet);
     
-                this.logger.log(`Successfully transferred ${loan.creditAmount * 0.7} USDC to ${payoutWallet}`);
-            } catch (error) {
-                this.logger.error(`Error transferring USDC for loan ${loan.id}: ${error.message}`);
+                    const tx = await contract.payout(payoutWallet, payoutAmount);
+                  
+        
+                    console.debug(`Transferring ${payoutAmount} USDC to ${payoutWallet}...`);
+    
+                    
+                    const receipt = await tx.wait();
+                    return receipt;
+                    console.log(receipt);
+                    console.log(`Successfully credited loan ID ${loan.id}: ${loan.creditAmount * 0.7} USDC to ${payoutWallet}`);
+                } catch (error) {
+                    console.error(`Error processing loan ID ${loan.id}: ${error.message}`, error);
+                    loan.status = 'error';
+                    await this._loanRepository.save(loan);
+                }
             }
+        } catch (error) {
+            this.logger.error(`Error in checkPendingCredits method: ${error.message}`, error);
         }
     }
     
-
     @Cron(CronExpression.EVERY_5_SECONDS)
     async checkPendingLoans() {
         const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
