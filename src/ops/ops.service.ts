@@ -1,6 +1,48 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Lending } from './entities/lending.entity';
+import { Repository } from 'typeorm';
+import { Cron, CronExpression, Interval } from '@nestjs/schedule';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class OpsService {
-    constructor() {}
+    private readonly logger = new Logger(OpsService.name);
+
+    constructor(
+        @InjectRepository(Lending)
+        private readonly _lendingRepository: Repository<Lending>,
+        private readonly httpService: HttpService,
+    ) {}
+
+    async saveLending(lending: Lending) {
+        return await this._lendingRepository.save(lending);
+    }
+
+    @Cron(CronExpression.EVERY_5_SECONDS)
+    async checkPendingLendings() {
+        const pendingLendings = await this._lendingRepository.find({
+            where: { status: 'pending' },
+        });
+
+        for (const lending of pendingLendings) {
+            try {
+                const transactionId = lending.transactionId;
+                const appId = 'app_a8533e587ab2fda886dc159e4b5acc04';
+                const url = `https://developer.worldcoin.org/api/v2/minikit/transaction/${transactionId}?app_id=${appId}`;
+
+                const response = await firstValueFrom(this.httpService.get(url));
+                const data = response.data;
+
+                if (data.transactionStatus === 'mined') {
+                    lending.status = 'received';
+                    lending.receivedAmount = parseFloat(data.inputTokenAmount) / 1e6;
+                    await this._lendingRepository.save(lending);
+                }
+            } catch (error) {
+                this.logger.error(`Error checking transaction ${lending.transactionId}: ${error.message}`);
+            }
+        }
+    }
 }
