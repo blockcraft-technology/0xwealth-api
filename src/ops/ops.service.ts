@@ -8,6 +8,8 @@ import { firstValueFrom } from 'rxjs';
 import { BalancesService } from 'src/balances/balances.service';
 import { CustodialService } from 'src/custodial/custodial.service';
 import { Loan } from './entities/loan.entity';
+import { ethers } from 'ethers';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class OpsService {
@@ -21,6 +23,7 @@ export class OpsService {
         private readonly httpService: HttpService,
         private readonly balancesService: BalancesService,
         private readonly custodialService: CustodialService,
+        private readonly configService: ConfigService,
     ) {}
 
     async saveLending(lending: Lending) {
@@ -37,6 +40,50 @@ export class OpsService {
         loan.status = 'pending';
         return this._loanRepository.save(loan);
     }
+
+    @Cron(CronExpression.EVERY_10_SECONDS)
+    async checkPendingCredits() {
+        const pendingLoans = await this._loanRepository.find({
+            where: {
+                status: 'received'
+            },
+            take: 2,
+        });
+    
+        const usdcAbi = [
+            "function transfer(address to, uint256 amount) external returns (bool)",
+        ];
+        
+        const rpcUrl = this.configService.get<string>('RPC_URL');
+        const walletKey = this.configService.get<string>('LENDING_POOL_PK');
+        const usdcContractAddress = this.configService.get<string>('USDC_CONTRACT_ADDRESS');
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+    
+        const lendingPoolWallet = new ethers.Wallet(walletKey, provider);
+        const usdcContract = new ethers.Contract(
+            usdcContractAddress,
+            usdcAbi,
+            lendingPoolWallet
+        );
+    
+        for (const loan of pendingLoans) {
+            const payoutAmount = ethers.parseUnits((loan.creditAmount * 0.7).toString(), 6);
+            const payoutWallet = loan.userWallet;
+    
+            try {
+                const tx = await usdcContract.transfer(payoutWallet, payoutAmount);
+                await tx.wait(); 
+    
+                loan.status = 'loan_credited';
+                await this._loanRepository.save(loan);
+    
+                this.logger.log(`Successfully transferred ${loan.creditAmount * 0.7} USDC to ${payoutWallet}`);
+            } catch (error) {
+                this.logger.error(`Error transferring USDC for loan ${loan.id}: ${error.message}`);
+            }
+        }
+    }
+    
 
     @Cron(CronExpression.EVERY_5_SECONDS)
     async checkPendingLoans() {
