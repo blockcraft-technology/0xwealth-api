@@ -6,11 +6,13 @@ import { CustodialModule } from 'src/custodial/custodial.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Lending } from './entities/lending.entity';
 import { Loan } from './entities/loan.entity';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Lending, Loan]),
     BalancesModule,
+    HttpModule,
     CustodialModule,
   ],
   providers: [OpsService],
